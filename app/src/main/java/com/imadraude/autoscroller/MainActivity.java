@@ -18,7 +18,9 @@ public class MainActivity extends Activity {
 
     private SharedPreferences preferences;
     private TextView swipeSpeedValue;
+    private TextView updateStatusView;
     private int swipeSpeedLevel;
+    private UpdateManager updateManager;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -113,10 +115,30 @@ public class MainActivity extends Activity {
             Intent intent = new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
             startActivity(intent);
         });
-        root.addView(settings, matchWrap(0, dp(12)));
+        root.addView(settings, matchWrap(0, dp(22)));
+
+        TextView updateLabel = new TextView(this);
+        updateLabel.setText(R.string.update_section_label);
+        updateLabel.setTextSize(18);
+        updateLabel.setTextColor(Color.WHITE);
+        root.addView(updateLabel, matchWrap(0, dp(6)));
+
+        updateStatusView = new TextView(this);
+        updateStatusView.setText(R.string.update_status_idle);
+        updateStatusView.setTextSize(14);
+        updateStatusView.setTextColor(0xFFB6BBC5);
+        root.addView(updateStatusView, matchWrap(0, dp(10)));
+
+        Button checkUpdates = new Button(this);
+        checkUpdates.setText(R.string.check_updates);
+        checkUpdates.setAllCaps(false);
+        checkUpdates.setTextColor(Color.WHITE);
+        checkUpdates.setBackgroundColor(0xFF242830);
+        checkUpdates.setOnClickListener(v -> updateManager.checkForUpdates());
+        root.addView(checkUpdates, matchWrap(0, dp(16)));
 
         TextView privacy = new TextView(this);
-        privacy.setText(R.string.privacy_no_internet);
+        privacy.setText(R.string.privacy_network);
         privacy.setTextSize(14);
         privacy.setTextColor(0xFF858A94);
         root.addView(privacy, matchWrap(0, 0));
@@ -124,6 +146,25 @@ public class MainActivity extends Activity {
         scrollView.addView(root);
         setContentView(scrollView);
         updateSwipeSpeedValue();
+
+        updateManager = new UpdateManager(this, status -> updateStatusView.setText(status));
+        updateManager.start();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (updateManager != null) {
+            updateManager.onResume();
+        }
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (updateManager != null) {
+            updateManager.destroy();
+        }
+        super.onDestroy();
     }
 
     private Button makeControlButton(String text) {
