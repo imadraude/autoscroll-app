@@ -1,9 +1,9 @@
 <resources>
     <string name="app_name">AutoScroller Lite</string>
     <string name="accessibility_description">Локальний автоскролер. Імітує пальцеві свайпи та показує панель керування.</string>
-    <string name="main_info">Мінімальний локальний автоскролер. Кожен рух трохи відрізняється за траєкторією, довжиною та тривалістю, щоб свайп був схожим на звичайний рух пальцем.\n\n• без інтернету\n• без реклами та аналітики\n• без акаунтів\n• без збереження вмісту екрана\n\nПлаваюча панель керує частотою повторення свайпів.</string>
+    <string name="main_info">Мінімальний автоскролер. Кожен рух трохи відрізняється за траєкторією, довжиною та тривалістю, щоб свайп був схожим на звичайний рух пальцем.\n\n• без реклами та аналітики\n• без акаунтів\n• без збереження вмісту екрана\n• інтернет лише для автооновлень з GitHub Releases\n\nПлаваюча панель керує частотою повторення свайпів.</string>
     <string name="enable_service">Увімкнути службу</string>
-    <string name="privacy_no_internet">У маніфесті навмисно відсутній дозвіл INTERNET, тому застосунок не може підключатися до мережі.</string>
+    <string name="privacy_network">Мережа використовується лише для перевірки офіційного GitHub Release та завантаження нового APK. Перед встановленням застосунок перевіряє package name, versionCode і цифровий підпис.</string>
     <string name="swipe_speed_label">Швидкість свайпу</string>
     <string name="swipe_speed_hint">1 — повільніший рух пальця, 5 — дуже швидкий. Частота повторення налаштовується вже на плаваючій панелі.</string>
     <string name="decrease_swipe_speed_description">Зменшити швидкість свайпу</string>
@@ -17,4 +17,16 @@
     <string name="frequency_level_description">Рівень частоти свайпів</string>
     <string name="minimize_panel_description">Згорнути панель</string>
     <string name="close_panel_description">Зупинити й прибрати панель</string>
+    <string name="update_section_label">Автооновлення</string>
+    <string name="check_updates">Перевірити зараз</string>
+    <string name="update_status_idle">Оновлення перевіряються автоматично.</string>
+    <string name="update_status_checking">Перевіряю GitHub Releases…</string>
+    <string name="update_status_latest">Актуальна версія: build #%1$d.</string>
+    <string name="update_status_downloading">Завантажую build #%1$d…</string>
+    <string name="update_status_install_permission">Дозволь AutoScroller Lite встановлювати оновлення з цього джерела.</string>
+    <string name="update_status_install_ready">Build #%1$d завантажено. Підтвердь системне встановлення.</string>
+    <string name="update_status_error">Не вдалося перевірити або завантажити оновлення. Спробую знову при наступному запуску.</string>
+    <string name="update_status_security_error">Оновлення відхилено: APK не пройшов перевірку пакета, версії або цифрового підпису.</string>
+    <string name="update_download_title">Оновлення AutoScroller Lite</string>
+    <string name="update_download_description">Завантаження перевіреного APK з GitHub Releases</string>
 </resources>
