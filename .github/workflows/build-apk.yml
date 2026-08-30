@@ -38,7 +38,7 @@ jobs:
           gradle-version: ${{ env.GRADLE_VERSION }}
           cache-provider: basic
 
-      - name: Install Android SDK
+      - name: Install and pin Android SDK
         shell: bash
         run: |
           set -euo pipefail
@@ -49,6 +49,15 @@ jobs:
             "platform-tools" \
             "platforms;android-${ANDROID_PLATFORM}" \
             "build-tools;${BUILD_TOOLS}"
+
+          # Hosted runners can contain preview/future Android platforms.
+          # Keep lint deterministic instead of suppressing OldTargetApi.
+          find "$ANDROID_HOME/platforms" \
+            -mindepth 1 -maxdepth 1 -type d -name 'android-*' \
+            ! -name "android-${ANDROID_PLATFORM}" \
+            -print -exec rm -rf {} +
+
+          test -d "$ANDROID_HOME/platforms/android-${ANDROID_PLATFORM}"
 
       - name: Enforce source privacy policy
         shell: bash
