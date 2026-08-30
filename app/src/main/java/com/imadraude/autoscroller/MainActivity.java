@@ -25,29 +25,21 @@ public class MainActivity extends Activity {
         root.setBackgroundColor(Color.WHITE);
 
         TextView title = new TextView(this);
-        title.setText("AutoScroller Lite");
+        title.setText(R.string.app_name);
         title.setTextSize(28);
         title.setTextColor(Color.BLACK);
         title.setGravity(Gravity.CENTER);
         root.addView(title, matchWrap(0, dp(12)));
 
         TextView info = new TextView(this);
-        info.setText(
-                "Мінімальний локальний автоскролер.\n\n" +
-                "• без інтернету\n" +
-                "• без реклами та аналітики\n" +
-                "• без акаунтів\n" +
-                "• без збереження вмісту екрана\n\n" +
-                "Для виконання жестів Android вимагає увімкнути службу спеціальних можливостей. " +
-                "Після увімкнення з'явиться маленька плаваюча панель."
-        );
+        info.setText(R.string.main_info);
         info.setTextSize(17);
         info.setTextColor(Color.DKGRAY);
         info.setLineSpacing(0f, 1.15f);
         root.addView(info, matchWrap(0, dp(24)));
 
         Button settings = new Button(this);
-        settings.setText("Увімкнути службу");
+        settings.setText(R.string.enable_service);
         settings.setAllCaps(false);
         settings.setOnClickListener(v -> {
             Intent intent = new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
@@ -56,7 +48,7 @@ public class MainActivity extends Activity {
         root.addView(settings, matchWrap(0, dp(10)));
 
         TextView privacy = new TextView(this);
-        privacy.setText("У маніфесті навмисно відсутній дозвіл INTERNET, тому застосунок не може підключатися до мережі.");
+        privacy.setText(R.string.privacy_no_internet);
         privacy.setTextSize(14);
         privacy.setTextColor(Color.GRAY);
         root.addView(privacy, matchWrap(0, 0));
@@ -65,13 +57,13 @@ public class MainActivity extends Activity {
     }
 
     private LinearLayout.LayoutParams matchWrap(int top, int bottom) {
-        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
         );
-        p.topMargin = top;
-        p.bottomMargin = bottom;
-        return p;
+        params.topMargin = top;
+        params.bottomMargin = bottom;
+        return params;
     }
 
     private int dp(int value) {
