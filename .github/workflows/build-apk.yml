@@ -185,7 +185,7 @@ jobs:
     name: Emulator smoke test
     needs: quality
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
 
     steps:
       - name: Checkout
@@ -230,12 +230,25 @@ jobs:
           EMULATOR="$ANDROID_HOME/emulator/emulator"
           APK="app/build/outputs/apk/debug/app-debug.apk"
 
+          diagnose() {
+            echo "=== adb devices ==="
+            "$ADB" devices -l || true
+            echo "=== emulator process ==="
+            ps -ef | grep '[e]mulator' || true
+            echo "=== emulator log tail ==="
+            tail -n 250 emulator.log 2>/dev/null || true
+          }
+
           echo "no" | "$AVDMANAGER" create avd \
             --force \
             --name ciApi36 \
             --package "system-images;android-${ANDROID_PLATFORM};google_apis;x86_64"
 
           sudo chmod 666 /dev/kvm || true
+          "$EMULATOR" -accel-check | tee emulator-accel.txt || true
+
+          "$ADB" kill-server || true
+          "$ADB" start-server
 
           nohup "$EMULATOR" \
             -avd ciApi36 \
@@ -243,39 +256,62 @@ jobs:
             -no-audio \
             -no-boot-anim \
             -no-snapshot \
-            -gpu swiftshader_indirect \
+            -gpu swiftshader \
             > emulator.log 2>&1 &
+          EMULATOR_PID=$!
+          echo "$EMULATOR_PID" > emulator.pid
 
-          "$ADB" wait-for-device
+          cleanup() {
+            "$ADB" emu kill >/dev/null 2>&1 || true
+            kill "$EMULATOR_PID" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          if ! timeout 120s "$ADB" wait-for-device; then
+            echo "ERROR: emulator did not appear in adb within 120 seconds."
+            diagnose
+            exit 1
+          fi
 
           BOOTED=""
-          for _ in $(seq 1 72); do
-            BOOTED="$("$ADB" shell getprop sys.boot_completed | tr -d '\r')"
+          BOOT_DEADLINE=$((SECONDS + 300))
+          while (( SECONDS < BOOT_DEADLINE )); do
+            BOOTED="$(timeout 10s "$ADB" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)"
             if [[ "$BOOTED" == "1" ]]; then
               break
             fi
+            if ! kill -0 "$EMULATOR_PID" 2>/dev/null; then
+              echo "ERROR: emulator process exited before Android booted."
+              diagnose
+              exit 1
+            fi
             sleep 5
           done
-          test "$BOOTED" = "1"
 
-          "$ADB" install -r "$APK"
+          if [[ "$BOOTED" != "1" ]]; then
+            echo "ERROR: Android did not finish booting within 300 seconds."
+            diagnose
+            exit 1
+          fi
 
-          "$ADB" logcat -c
-          "$ADB" shell am start -W -n com.imadraude.autoscroller/.MainActivity | tee activity-launch.txt
+          timeout 60s "$ADB" install -r "$APK"
+
+          timeout 15s "$ADB" logcat -c
+          timeout 30s "$ADB" shell am start -W -n com.imadraude.autoscroller/.MainActivity | tee activity-launch.txt
           grep -Fq "Status: ok" activity-launch.txt
 
           sleep 2
-          test -n "$("$ADB" shell pidof com.imadraude.autoscroller | tr -d '\r')"
+          test -n "$(timeout 15s "$ADB" shell pidof com.imadraude.autoscroller | tr -d '\r')"
 
-          "$ADB" shell settings put secure enabled_accessibility_services \
+          timeout 15s "$ADB" shell settings put secure enabled_accessibility_services \
             com.imadraude.autoscroller/com.imadraude.autoscroller.AutoScrollService
-          "$ADB" shell settings put secure accessibility_enabled 1
+          timeout 15s "$ADB" shell settings put secure accessibility_enabled 1
 
           sleep 3
-          "$ADB" shell dumpsys accessibility | tee accessibility-state.txt
+          timeout 30s "$ADB" shell dumpsys accessibility | tee accessibility-state.txt
           grep -Fq "com.imadraude.autoscroller.AutoScrollService" accessibility-state.txt
 
-          "$ADB" logcat -d | tee logcat.txt
+          timeout 30s "$ADB" logcat -d | tee logcat.txt
           if grep -A8 -F "FATAL EXCEPTION" logcat.txt | grep -Fq "Process: com.imadraude.autoscroller"; then
             echo "ERROR: App crashed during emulator smoke test."
             exit 1
@@ -288,6 +324,8 @@ jobs:
           name: emulator-smoke-diagnostics
           path: |
             emulator.log
+            emulator-accel.txt
+            emulator.pid
             activity-launch.txt
             accessibility-state.txt
             logcat.txt
