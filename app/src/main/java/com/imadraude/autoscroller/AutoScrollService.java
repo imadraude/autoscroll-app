@@ -89,15 +89,16 @@ public class AutoScrollService extends AccessibilityService {
         handle.setTextColor(Color.WHITE);
         handle.setGravity(Gravity.CENTER);
         handle.setPadding(dp(6), 0, dp(6), 0);
+        handle.setContentDescription(getString(R.string.drag_handle_description));
         panel.addView(handle, new LinearLayout.LayoutParams(dp(38), dp(44)));
 
         playButton = makeButton("▶");
-        playButton.setContentDescription("Старт або пауза");
+        playButton.setContentDescription(getString(R.string.start_pause_description));
         playButton.setOnClickListener(v -> toggleScrolling());
         panel.addView(playButton);
 
         directionButton = makeButton("↓");
-        directionButton.setContentDescription("Змінити напрямок");
+        directionButton.setContentDescription(getString(R.string.change_direction_description));
         directionButton.setOnClickListener(v -> {
             scrollDown = !scrollDown;
             directionButton.setText(scrollDown ? "↓" : "↑");
@@ -106,7 +107,7 @@ public class AutoScrollService extends AccessibilityService {
         panel.addView(directionButton);
 
         Button slower = makeButton("−");
-        slower.setContentDescription("Повільніше");
+        slower.setContentDescription(getString(R.string.slower_description));
         slower.setOnClickListener(v -> {
             speedLevel = ScrollTiming.slower(speedLevel);
             updateStatus();
@@ -120,7 +121,7 @@ public class AutoScrollService extends AccessibilityService {
         panel.addView(speedView, new LinearLayout.LayoutParams(dp(32), dp(44)));
 
         Button faster = makeButton("+");
-        faster.setContentDescription("Швидше");
+        faster.setContentDescription(getString(R.string.faster_description));
         faster.setOnClickListener(v -> {
             speedLevel = ScrollTiming.faster(speedLevel);
             updateStatus();
@@ -174,6 +175,7 @@ public class AutoScrollService extends AccessibilityService {
         final float[] touchY = new float[1];
         final int[] startX = new int[1];
         final int[] startY = new int[1];
+        final boolean[] moved = new boolean[1];
 
         handle.setOnTouchListener((view, event) -> {
             switch (event.getActionMasked()) {
@@ -182,16 +184,29 @@ public class AutoScrollService extends AccessibilityService {
                     touchY[0] = event.getRawY();
                     startX[0] = params.x;
                     startY[0] = params.y;
+                    moved[0] = false;
                     return true;
                 case MotionEvent.ACTION_MOVE:
-                    params.x = startX[0] + Math.round(event.getRawX() - touchX[0]);
-                    params.y = startY[0] + Math.round(event.getRawY() - touchY[0]);
+                    float deltaX = event.getRawX() - touchX[0];
+                    float deltaY = event.getRawY() - touchY[0];
+                    if (Math.abs(deltaX) > dp(4) || Math.abs(deltaY) > dp(4)) {
+                        moved[0] = true;
+                    }
+                    params.x = startX[0] + Math.round(deltaX);
+                    params.y = startY[0] + Math.round(deltaY);
                     if (overlay != null) {
                         windowManager.updateViewLayout(overlay, params);
                     }
                     return true;
-                default:
+                case MotionEvent.ACTION_UP:
+                    if (!moved[0]) {
+                        view.performClick();
+                    }
                     return true;
+                case MotionEvent.ACTION_CANCEL:
+                    return true;
+                default:
+                    return false;
             }
         });
     }
@@ -276,7 +291,9 @@ public class AutoScrollService extends AccessibilityService {
             speedView.setText(String.valueOf(speedLevel));
         }
         if (statusView != null) {
-            statusView.setText(running ? "СКРОЛ" : "СТОП");
+            statusView.setText(running
+                    ? R.string.scroll_status_running
+                    : R.string.scroll_status_stopped);
         }
     }
 
