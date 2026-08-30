@@ -393,3 +393,37 @@ jobs:
         uses: github/codeql-action/analyze@v4
         with:
           category: /language:java-kotlin
+
+  release:
+    name: Publish GitHub Release
+    needs: [quality, emulator-smoke, codeql]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download verified APK
+        uses: actions/download-artifact@v8
+        with:
+          name: AutoScroller-Lite-v1.0
+          path: release
+
+      - name: Publish verified release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="build-${GITHUB_RUN_NUMBER}"
+
+          gh release create "$TAG" \
+            release/AutoScroller-Lite-v1.0-debug.apk \
+            release/AutoScroller-Lite-v1.0-debug.apk.sha256 \
+            release/permissions.txt \
+            release/signature.txt \
+            --target "$GITHUB_SHA" \
+            --title "AutoScroller Lite — build #${GITHUB_RUN_NUMBER}" \
+            --notes "Автоматичний перевірений білд. Усі CI-перевірки пройдені: unit tests, strict lint, debug/release build, APK audit, CodeQL та Android 16 emulator smoke test." \
+            --latest
