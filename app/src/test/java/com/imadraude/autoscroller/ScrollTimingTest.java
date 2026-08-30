@@ -7,36 +7,46 @@ import org.junit.Test;
 public class ScrollTimingTest {
 
     @Test
-    public void speedDurationsMatchExpectedProfile() {
-        assertEquals(1200L, ScrollTiming.durationForSpeed(1));
-        assertEquals(900L, ScrollTiming.durationForSpeed(2));
-        assertEquals(650L, ScrollTiming.durationForSpeed(3));
-        assertEquals(450L, ScrollTiming.durationForSpeed(4));
-        assertEquals(300L, ScrollTiming.durationForSpeed(5));
+    public void swipeDurationsMatchExpectedProfile() {
+        assertEquals(320L, ScrollTiming.swipeDurationForSpeed(1));
+        assertEquals(250L, ScrollTiming.swipeDurationForSpeed(2));
+        assertEquals(190L, ScrollTiming.swipeDurationForSpeed(3));
+        assertEquals(140L, ScrollTiming.swipeDurationForSpeed(4));
+        assertEquals(100L, ScrollTiming.swipeDurationForSpeed(5));
     }
 
     @Test
-    public void pausesMatchExpectedProfile() {
-        assertEquals(650L, ScrollTiming.pauseForSpeed(1));
-        assertEquals(420L, ScrollTiming.pauseForSpeed(2));
-        assertEquals(250L, ScrollTiming.pauseForSpeed(3));
-        assertEquals(140L, ScrollTiming.pauseForSpeed(4));
-        assertEquals(70L, ScrollTiming.pauseForSpeed(5));
+    public void frequencyPeriodsMatchExpectedProfile() {
+        assertEquals(3000L, ScrollTiming.periodForFrequency(1));
+        assertEquals(2000L, ScrollTiming.periodForFrequency(2));
+        assertEquals(1200L, ScrollTiming.periodForFrequency(3));
+        assertEquals(750L, ScrollTiming.periodForFrequency(4));
+        assertEquals(450L, ScrollTiming.periodForFrequency(5));
     }
 
     @Test
-    public void invalidLevelsFallBackToDefault() {
-        assertEquals(ScrollTiming.DEFAULT_LEVEL, ScrollTiming.normalize(0));
-        assertEquals(ScrollTiming.DEFAULT_LEVEL, ScrollTiming.normalize(6));
-        assertEquals(650L, ScrollTiming.durationForSpeed(-100));
-        assertEquals(250L, ScrollTiming.pauseForSpeed(100));
+    public void delayAccountsForSwipeDuration() {
+        assertEquals(1010L, ScrollTiming.delayAfterGesture(3, 190L));
+        assertEquals(80L, ScrollTiming.delayAfterGesture(5, 1000L));
     }
 
     @Test
-    public void speedChangesStayInsideBounds() {
-        assertEquals(1, ScrollTiming.slower(1));
-        assertEquals(2, ScrollTiming.slower(3));
-        assertEquals(4, ScrollTiming.faster(3));
-        assertEquals(5, ScrollTiming.faster(5));
+    public void invalidLevelsFallBackToDefaults() {
+        assertEquals(ScrollTiming.DEFAULT_SWIPE_SPEED_LEVEL, ScrollTiming.normalizeSwipeSpeed(0));
+        assertEquals(ScrollTiming.DEFAULT_FREQUENCY_LEVEL, ScrollTiming.normalizeFrequency(6));
+        assertEquals(190L, ScrollTiming.swipeDurationForSpeed(-100));
+        assertEquals(1200L, ScrollTiming.periodForFrequency(100));
+    }
+
+    @Test
+    public void controlsStayInsideBounds() {
+        assertEquals(1, ScrollTiming.slowerSwipe(1));
+        assertEquals(2, ScrollTiming.slowerSwipe(3));
+        assertEquals(4, ScrollTiming.fasterSwipe(3));
+        assertEquals(5, ScrollTiming.fasterSwipe(5));
+        assertEquals(1, ScrollTiming.lessFrequent(1));
+        assertEquals(2, ScrollTiming.lessFrequent(3));
+        assertEquals(4, ScrollTiming.moreFrequent(3));
+        assertEquals(5, ScrollTiming.moreFrequent(5));
     }
 }

@@ -1,14 +1,20 @@
 <resources>
     <string name="app_name">AutoScroller Lite</string>
-    <string name="accessibility_description">Локальний автоскролер. Виконує лише жести прокрутки та показує панель керування.</string>
-    <string name="main_info">Мінімальний локальний автоскролер.\n\n• без інтернету\n• без реклами та аналітики\n• без акаунтів\n• без збереження вмісту екрана\n\nДля виконання жестів Android вимагає увімкнути службу спеціальних можливостей. Після увімкнення з’явиться маленька плаваюча панель.</string>
+    <string name="accessibility_description">Локальний автоскролер. Імітує пальцеві свайпи та показує панель керування.</string>
+    <string name="main_info">Мінімальний локальний автоскролер. Кожен рух трохи відрізняється за траєкторією, довжиною та тривалістю, щоб свайп був схожим на звичайний рух пальцем.\n\n• без інтернету\n• без реклами та аналітики\n• без акаунтів\n• без збереження вмісту екрана\n\nПлаваюча панель керує частотою повторення свайпів.</string>
     <string name="enable_service">Увімкнути службу</string>
     <string name="privacy_no_internet">У маніфесті навмисно відсутній дозвіл INTERNET, тому застосунок не може підключатися до мережі.</string>
+    <string name="swipe_speed_label">Швидкість свайпу</string>
+    <string name="swipe_speed_hint">1 — повільніший рух пальця, 5 — дуже швидкий. Частота повторення налаштовується вже на плаваючій панелі.</string>
+    <string name="decrease_swipe_speed_description">Зменшити швидкість свайпу</string>
+    <string name="increase_swipe_speed_description">Збільшити швидкість свайпу</string>
     <string name="drag_handle_description">Перетягнути панель</string>
+    <string name="expand_panel_description">Розгорнути панель</string>
     <string name="start_pause_description">Старт або пауза</string>
     <string name="change_direction_description">Змінити напрямок</string>
-    <string name="slower_description">Повільніше</string>
-    <string name="faster_description">Швидше</string>
-    <string name="scroll_status_running">СКРОЛ</string>
-    <string name="scroll_status_stopped">СТОП</string>
+    <string name="less_frequent_description">Робити свайпи рідше</string>
+    <string name="more_frequent_description">Робити свайпи частіше</string>
+    <string name="frequency_level_description">Рівень частоти свайпів</string>
+    <string name="minimize_panel_description">Згорнути панель</string>
+    <string name="close_panel_description">Зупинити й прибрати панель</string>
 </resources>

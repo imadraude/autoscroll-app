@@ -2,6 +2,7 @@ package com.imadraude.autoscroller;
 
 import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.GestureDescription;
+import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.graphics.Path;
 import android.graphics.PixelFormat;
@@ -17,20 +18,27 @@ import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import java.util.Random;
+
 public class AutoScrollService extends AccessibilityService {
 
     private final Handler handler = new Handler(Looper.getMainLooper());
+    private final Random random = new Random();
+
     private WindowManager windowManager;
     private View overlay;
+    private WindowManager.LayoutParams overlayParams;
     private boolean running = false;
     private boolean scrollDown = true;
-    private int speedLevel = ScrollTiming.DEFAULT_LEVEL;
     private boolean gestureInFlight = false;
+    private boolean collapsed = false;
+    private int frequencyLevel = ScrollTiming.DEFAULT_FREQUENCY_LEVEL;
 
-    private TextView statusView;
+    private TextView handleView;
     private Button playButton;
     private Button directionButton;
-    private TextView speedView;
+    private TextView frequencyView;
+    private View[] expandedControls;
 
     private final Runnable scrollLoop = new Runnable() {
         @Override
@@ -38,7 +46,7 @@ public class AutoScrollService extends AccessibilityService {
             if (!running) {
                 return;
             }
-            performScrollGesture();
+            performHumanSwipe();
         }
     };
 
@@ -75,22 +83,22 @@ public class AutoScrollService extends AccessibilityService {
         LinearLayout panel = new LinearLayout(this);
         panel.setOrientation(LinearLayout.HORIZONTAL);
         panel.setGravity(Gravity.CENTER_VERTICAL);
-        panel.setPadding(dp(6), dp(5), dp(6), dp(5));
+        panel.setPadding(dp(5), dp(4), dp(5), dp(4));
 
         GradientDrawable bg = new GradientDrawable();
-        bg.setColor(0xE6202020);
+        bg.setColor(0xF0202227);
         bg.setCornerRadius(dp(18));
-        bg.setStroke(dp(1), 0x55444444);
+        bg.setStroke(dp(1), 0x66555A63);
         panel.setBackground(bg);
 
-        TextView handle = new TextView(this);
-        handle.setText("⋮⋮");
-        handle.setTextSize(20);
-        handle.setTextColor(Color.WHITE);
-        handle.setGravity(Gravity.CENTER);
-        handle.setPadding(dp(6), 0, dp(6), 0);
-        handle.setContentDescription(getString(R.string.drag_handle_description));
-        panel.addView(handle, new LinearLayout.LayoutParams(dp(38), dp(44)));
+        handleView = new TextView(this);
+        handleView.setText("⋮⋮");
+        handleView.setTextSize(20);
+        handleView.setTextColor(Color.WHITE);
+        handleView.setGravity(Gravity.CENTER);
+        handleView.setPadding(dp(5), 0, dp(5), 0);
+        handleView.setContentDescription(getString(R.string.drag_handle_description));
+        panel.addView(handleView, new LinearLayout.LayoutParams(dp(38), dp(44)));
 
         playButton = makeButton("▶");
         playButton.setContentDescription(getString(R.string.start_pause_description));
@@ -102,38 +110,55 @@ public class AutoScrollService extends AccessibilityService {
         directionButton.setOnClickListener(v -> {
             scrollDown = !scrollDown;
             directionButton.setText(scrollDown ? "↓" : "↑");
-            updateStatus();
         });
         panel.addView(directionButton);
 
-        Button slower = makeButton("−");
-        slower.setContentDescription(getString(R.string.slower_description));
-        slower.setOnClickListener(v -> {
-            speedLevel = ScrollTiming.slower(speedLevel);
-            updateStatus();
+        Button lessFrequent = makeButton("−");
+        lessFrequent.setContentDescription(getString(R.string.less_frequent_description));
+        lessFrequent.setOnClickListener(v -> {
+            frequencyLevel = ScrollTiming.lessFrequent(frequencyLevel);
+            updateFrequencyView();
         });
-        panel.addView(slower);
+        panel.addView(lessFrequent);
 
-        speedView = new TextView(this);
-        speedView.setTextSize(15);
-        speedView.setTextColor(Color.WHITE);
-        speedView.setGravity(Gravity.CENTER);
-        panel.addView(speedView, new LinearLayout.LayoutParams(dp(32), dp(44)));
+        frequencyView = new TextView(this);
+        frequencyView.setTextSize(15);
+        frequencyView.setTextColor(Color.WHITE);
+        frequencyView.setGravity(Gravity.CENTER);
+        frequencyView.setContentDescription(getString(R.string.frequency_level_description));
+        panel.addView(frequencyView, new LinearLayout.LayoutParams(dp(34), dp(44)));
 
-        Button faster = makeButton("+");
-        faster.setContentDescription(getString(R.string.faster_description));
-        faster.setOnClickListener(v -> {
-            speedLevel = ScrollTiming.faster(speedLevel);
-            updateStatus();
+        Button moreFrequent = makeButton("+");
+        moreFrequent.setContentDescription(getString(R.string.more_frequent_description));
+        moreFrequent.setOnClickListener(v -> {
+            frequencyLevel = ScrollTiming.moreFrequent(frequencyLevel);
+            updateFrequencyView();
         });
-        panel.addView(faster);
+        panel.addView(moreFrequent);
 
-        statusView = new TextView(this);
-        statusView.setTextSize(12);
-        statusView.setTextColor(0xFFBDBDBD);
-        statusView.setGravity(Gravity.CENTER);
-        statusView.setPadding(dp(4), 0, dp(6), 0);
-        panel.addView(statusView, new LinearLayout.LayoutParams(dp(52), dp(44)));
+        Button minimize = makeButton("—");
+        minimize.setContentDescription(getString(R.string.minimize_panel_description));
+        minimize.setOnClickListener(v -> setCollapsed(true));
+        panel.addView(minimize);
+
+        Button close = makeButton("×");
+        close.setContentDescription(getString(R.string.close_panel_description));
+        close.setOnClickListener(v -> {
+            stopScrolling();
+            removeOverlay();
+            disableSelf();
+        });
+        panel.addView(close);
+
+        expandedControls = new View[]{
+                playButton,
+                directionButton,
+                lessFrequent,
+                frequencyView,
+                moreFrequent,
+                minimize,
+                close
+        };
 
         WindowManager.LayoutParams params = new WindowManager.LayoutParams(
                 WindowManager.LayoutParams.WRAP_CONTENT,
@@ -144,14 +169,21 @@ public class AutoScrollService extends AccessibilityService {
                 PixelFormat.TRANSLUCENT
         );
         params.gravity = Gravity.TOP | Gravity.START;
-        params.x = dp(12);
-        params.y = dp(160);
-
-        installDrag(handle, params);
+        params.x = dp(10);
+        params.y = dp(150);
 
         overlay = panel;
+        overlayParams = params;
+
+        handleView.setOnClickListener(v -> {
+            if (collapsed) {
+                setCollapsed(false);
+            }
+        });
+        installDrag(handleView, params);
+
         windowManager.addView(overlay, params);
-        updateStatus();
+        updateFrequencyView();
     }
 
     private Button makeButton(String text) {
@@ -166,8 +198,26 @@ public class AutoScrollService extends AccessibilityService {
         button.setMinHeight(0);
         button.setMinimumHeight(0);
         button.setBackgroundColor(Color.TRANSPARENT);
-        button.setLayoutParams(new LinearLayout.LayoutParams(dp(42), dp(44)));
+        button.setLayoutParams(new LinearLayout.LayoutParams(dp(40), dp(44)));
         return button;
+    }
+
+    private void setCollapsed(boolean shouldCollapse) {
+        collapsed = shouldCollapse;
+        if (expandedControls != null) {
+            for (View control : expandedControls) {
+                control.setVisibility(collapsed ? View.GONE : View.VISIBLE);
+            }
+        }
+        if (handleView != null) {
+            handleView.setText(collapsed ? "●" : "⋮⋮");
+            handleView.setContentDescription(getString(collapsed
+                    ? R.string.expand_panel_description
+                    : R.string.drag_handle_description));
+        }
+        if (overlay != null && windowManager != null && overlayParams != null) {
+            windowManager.updateViewLayout(overlay, overlayParams);
+        }
     }
 
     private void installDrag(View handle, WindowManager.LayoutParams params) {
@@ -216,8 +266,9 @@ public class AutoScrollService extends AccessibilityService {
             stopScrolling();
         } else {
             running = true;
-            playButton.setText("Ⅱ");
-            updateStatus();
+            if (playButton != null) {
+                playButton.setText("Ⅱ");
+            }
             handler.removeCallbacks(scrollLoop);
             handler.post(scrollLoop);
         }
@@ -230,10 +281,9 @@ public class AutoScrollService extends AccessibilityService {
         if (playButton != null) {
             playButton.setText("▶");
         }
-        updateStatus();
     }
 
-    private void performScrollGesture() {
+    private void performHumanSwipe() {
         if (!running || gestureInFlight) {
             return;
         }
@@ -241,19 +291,41 @@ public class AutoScrollService extends AccessibilityService {
         int width = getResources().getDisplayMetrics().widthPixels;
         int height = getResources().getDisplayMetrics().heightPixels;
 
-        float x = width * 0.72f;
-        float top = height * 0.30f;
-        float bottom = height * 0.72f;
+        float startX = width * randomBetween(0.66f, 0.76f);
+        float endX = startX + width * randomBetween(-0.025f, 0.025f);
 
-        float startY = scrollDown ? bottom : top;
-        float endY = scrollDown ? top : bottom;
+        float startRatio = scrollDown
+                ? randomBetween(0.70f, 0.80f)
+                : randomBetween(0.20f, 0.30f);
+        float endRatio = scrollDown
+                ? randomBetween(0.20f, 0.34f)
+                : randomBetween(0.66f, 0.80f);
 
-        long duration = ScrollTiming.durationForSpeed(speedLevel);
-        long pause = ScrollTiming.pauseForSpeed(speedLevel);
+        float startY = height * startRatio;
+        float endY = height * endRatio;
+        float deltaY = endY - startY;
+        float bend = width * randomBetween(-0.018f, 0.018f);
+
+        float control1X = startX + bend;
+        float control1Y = startY + deltaY * randomBetween(0.24f, 0.36f);
+        float control2X = endX - bend * 0.55f;
+        float control2Y = startY + deltaY * randomBetween(0.66f, 0.82f);
+
+        SharedPreferences preferences = getSharedPreferences(AppPreferences.FILE_NAME, MODE_PRIVATE);
+        int swipeSpeed = ScrollTiming.normalizeSwipeSpeed(preferences.getInt(
+                AppPreferences.KEY_SWIPE_SPEED,
+                ScrollTiming.DEFAULT_SWIPE_SPEED_LEVEL
+        ));
+
+        long baseDuration = ScrollTiming.swipeDurationForSpeed(swipeSpeed);
+        long duration = randomizedTime(baseDuration, 0.10f, 70L);
+        long basePeriod = ScrollTiming.periodForFrequency(frequencyLevel);
+        long period = randomizedTime(basePeriod, 0.04f, 200L);
+        long nextDelay = Math.max(80L, period - duration);
 
         Path path = new Path();
-        path.moveTo(x, startY);
-        path.lineTo(x, endY);
+        path.moveTo(startX, startY);
+        path.cubicTo(control1X, control1Y, control2X, control2Y, endX, endY);
 
         GestureDescription.StrokeDescription stroke =
                 new GestureDescription.StrokeDescription(path, 0, duration);
@@ -267,7 +339,7 @@ public class AutoScrollService extends AccessibilityService {
             public void onCompleted(GestureDescription gestureDescription) {
                 gestureInFlight = false;
                 if (running) {
-                    handler.postDelayed(scrollLoop, pause);
+                    handler.postDelayed(scrollLoop, nextDelay);
                 }
             }
 
@@ -275,26 +347,30 @@ public class AutoScrollService extends AccessibilityService {
             public void onCancelled(GestureDescription gestureDescription) {
                 gestureInFlight = false;
                 if (running) {
-                    handler.postDelayed(scrollLoop, pause + 150);
+                    handler.postDelayed(scrollLoop, nextDelay + 150L);
                 }
             }
         }, handler);
 
         if (!accepted) {
             gestureInFlight = false;
-            handler.postDelayed(scrollLoop, 300);
+            handler.postDelayed(scrollLoop, 300L);
         }
     }
 
-    private void updateStatus() {
-        if (speedView != null) {
-            speedView.setText(String.valueOf(speedLevel));
+    private void updateFrequencyView() {
+        if (frequencyView != null) {
+            frequencyView.setText(String.valueOf(frequencyLevel));
         }
-        if (statusView != null) {
-            statusView.setText(running
-                    ? R.string.scroll_status_running
-                    : R.string.scroll_status_stopped);
-        }
+    }
+
+    private float randomBetween(float min, float max) {
+        return min + random.nextFloat() * (max - min);
+    }
+
+    private long randomizedTime(long base, float fraction, long minimum) {
+        float factor = randomBetween(1.0f - fraction, 1.0f + fraction);
+        return Math.max(minimum, Math.round(base * factor));
     }
 
     private void removeOverlay() {
@@ -306,6 +382,13 @@ public class AutoScrollService extends AccessibilityService {
             }
         }
         overlay = null;
+        overlayParams = null;
+        handleView = null;
+        playButton = null;
+        directionButton = null;
+        frequencyView = null;
+        expandedControls = null;
+        collapsed = false;
     }
 
     private int dp(int value) {
