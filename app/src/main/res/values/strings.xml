@@ -1,4 +1,14 @@
 <resources>
     <string name="app_name">AutoScroller Lite</string>
     <string name="accessibility_description">Локальний автоскролер. Виконує лише жести прокрутки та показує панель керування.</string>
+    <string name="main_info">Мінімальний локальний автоскролер.\n\n• без інтернету\n• без реклами та аналітики\n• без акаунтів\n• без збереження вмісту екрана\n\nДля виконання жестів Android вимагає увімкнути службу спеціальних можливостей. Після увімкнення з’явиться маленька плаваюча панель.</string>
+    <string name="enable_service">Увімкнути службу</string>
+    <string name="privacy_no_internet">У маніфесті навмисно відсутній дозвіл INTERNET, тому застосунок не може підключатися до мережі.</string>
+    <string name="drag_handle_description">Перетягнути панель</string>
+    <string name="start_pause_description">Старт або пауза</string>
+    <string name="change_direction_description">Змінити напрямок</string>
+    <string name="slower_description">Повільніше</string>
+    <string name="faster_description">Швидше</string>
+    <string name="scroll_status_running">СКРОЛ</string>
+    <string name="scroll_status_stopped">СТОП</string>
 </resources>
