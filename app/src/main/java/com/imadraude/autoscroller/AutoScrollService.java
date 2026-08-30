@@ -24,7 +24,7 @@ public class AutoScrollService extends AccessibilityService {
     private View overlay;
     private boolean running = false;
     private boolean scrollDown = true;
-    private int speedLevel = 3;
+    private int speedLevel = ScrollTiming.DEFAULT_LEVEL;
     private boolean gestureInFlight = false;
 
     private TextView statusView;
@@ -35,7 +35,9 @@ public class AutoScrollService extends AccessibilityService {
     private final Runnable scrollLoop = new Runnable() {
         @Override
         public void run() {
-            if (!running) return;
+            if (!running) {
+                return;
+            }
             performScrollGesture();
         }
     };
@@ -64,7 +66,9 @@ public class AutoScrollService extends AccessibilityService {
     }
 
     private void showOverlay() {
-        if (overlay != null) return;
+        if (overlay != null) {
+            return;
+        }
 
         windowManager = (WindowManager) getSystemService(WINDOW_SERVICE);
 
@@ -104,7 +108,7 @@ public class AutoScrollService extends AccessibilityService {
         Button slower = makeButton("−");
         slower.setContentDescription("Повільніше");
         slower.setOnClickListener(v -> {
-            speedLevel = Math.max(1, speedLevel - 1);
+            speedLevel = ScrollTiming.slower(speedLevel);
             updateStatus();
         });
         panel.addView(slower);
@@ -118,7 +122,7 @@ public class AutoScrollService extends AccessibilityService {
         Button faster = makeButton("+");
         faster.setContentDescription("Швидше");
         faster.setOnClickListener(v -> {
-            speedLevel = Math.min(5, speedLevel + 1);
+            speedLevel = ScrollTiming.faster(speedLevel);
             updateStatus();
         });
         panel.addView(faster);
@@ -134,8 +138,8 @@ public class AutoScrollService extends AccessibilityService {
                 WindowManager.LayoutParams.WRAP_CONTENT,
                 WindowManager.LayoutParams.WRAP_CONTENT,
                 WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE |
-                        WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                        | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
                 PixelFormat.TRANSLUCENT
         );
         params.gravity = Gravity.TOP | Gravity.START;
@@ -150,19 +154,19 @@ public class AutoScrollService extends AccessibilityService {
     }
 
     private Button makeButton(String text) {
-        Button b = new Button(this);
-        b.setText(text);
-        b.setTextSize(18);
-        b.setTextColor(Color.WHITE);
-        b.setAllCaps(false);
-        b.setPadding(0, 0, 0, 0);
-        b.setMinWidth(0);
-        b.setMinimumWidth(0);
-        b.setMinHeight(0);
-        b.setMinimumHeight(0);
-        b.setBackgroundColor(Color.TRANSPARENT);
-        b.setLayoutParams(new LinearLayout.LayoutParams(dp(42), dp(44)));
-        return b;
+        Button button = new Button(this);
+        button.setText(text);
+        button.setTextSize(18);
+        button.setTextColor(Color.WHITE);
+        button.setAllCaps(false);
+        button.setPadding(0, 0, 0, 0);
+        button.setMinWidth(0);
+        button.setMinimumWidth(0);
+        button.setMinHeight(0);
+        button.setMinimumHeight(0);
+        button.setBackgroundColor(Color.TRANSPARENT);
+        button.setLayoutParams(new LinearLayout.LayoutParams(dp(42), dp(44)));
+        return button;
     }
 
     private void installDrag(View handle, WindowManager.LayoutParams params) {
@@ -171,7 +175,7 @@ public class AutoScrollService extends AccessibilityService {
         final int[] startX = new int[1];
         final int[] startY = new int[1];
 
-        handle.setOnTouchListener((v, event) -> {
+        handle.setOnTouchListener((view, event) -> {
             switch (event.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
                     touchX[0] = event.getRawX();
@@ -182,7 +186,9 @@ public class AutoScrollService extends AccessibilityService {
                 case MotionEvent.ACTION_MOVE:
                     params.x = startX[0] + Math.round(event.getRawX() - touchX[0]);
                     params.y = startY[0] + Math.round(event.getRawY() - touchY[0]);
-                    if (overlay != null) windowManager.updateViewLayout(overlay, params);
+                    if (overlay != null) {
+                        windowManager.updateViewLayout(overlay, params);
+                    }
                     return true;
                 default:
                     return true;
@@ -206,12 +212,16 @@ public class AutoScrollService extends AccessibilityService {
         running = false;
         gestureInFlight = false;
         handler.removeCallbacks(scrollLoop);
-        if (playButton != null) playButton.setText("▶");
+        if (playButton != null) {
+            playButton.setText("▶");
+        }
         updateStatus();
     }
 
     private void performScrollGesture() {
-        if (!running || gestureInFlight) return;
+        if (!running || gestureInFlight) {
+            return;
+        }
 
         int width = getResources().getDisplayMetrics().widthPixels;
         int height = getResources().getDisplayMetrics().heightPixels;
@@ -223,8 +233,8 @@ public class AutoScrollService extends AccessibilityService {
         float startY = scrollDown ? bottom : top;
         float endY = scrollDown ? top : bottom;
 
-        long duration = durationForSpeed(speedLevel);
-        long pause = pauseForSpeed(speedLevel);
+        long duration = ScrollTiming.durationForSpeed(speedLevel);
+        long pause = ScrollTiming.pauseForSpeed(speedLevel);
 
         Path path = new Path();
         path.moveTo(x, startY);
@@ -241,13 +251,17 @@ public class AutoScrollService extends AccessibilityService {
             @Override
             public void onCompleted(GestureDescription gestureDescription) {
                 gestureInFlight = false;
-                if (running) handler.postDelayed(scrollLoop, pause);
+                if (running) {
+                    handler.postDelayed(scrollLoop, pause);
+                }
             }
 
             @Override
             public void onCancelled(GestureDescription gestureDescription) {
                 gestureInFlight = false;
-                if (running) handler.postDelayed(scrollLoop, pause + 150);
+                if (running) {
+                    handler.postDelayed(scrollLoop, pause + 150);
+                }
             }
         }, handler);
 
@@ -257,38 +271,21 @@ public class AutoScrollService extends AccessibilityService {
         }
     }
 
-    private long durationForSpeed(int level) {
-        switch (level) {
-            case 1: return 1200;
-            case 2: return 900;
-            case 3: return 650;
-            case 4: return 450;
-            case 5: return 300;
-            default: return 650;
-        }
-    }
-
-    private long pauseForSpeed(int level) {
-        switch (level) {
-            case 1: return 650;
-            case 2: return 420;
-            case 3: return 250;
-            case 4: return 140;
-            case 5: return 70;
-            default: return 250;
-        }
-    }
-
     private void updateStatus() {
-        if (speedView != null) speedView.setText(String.valueOf(speedLevel));
-        if (statusView != null) statusView.setText(running ? "СКРОЛ" : "СТОП");
+        if (speedView != null) {
+            speedView.setText(String.valueOf(speedLevel));
+        }
+        if (statusView != null) {
+            statusView.setText(running ? "СКРОЛ" : "СТОП");
+        }
     }
 
     private void removeOverlay() {
         if (overlay != null && windowManager != null) {
             try {
                 windowManager.removeView(overlay);
-            } catch (Exception ignored) {
+            } catch (RuntimeException ignored) {
+                // Вікно вже могло бути видалене системою.
             }
         }
         overlay = null;
