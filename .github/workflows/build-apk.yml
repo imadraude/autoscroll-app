@@ -230,9 +230,17 @@ jobs:
           EMULATOR="$ANDROID_HOME/emulator/emulator"
           APK="app/build/outputs/apk/debug/app-debug.apk"
 
+          export ANDROID_USER_HOME="$RUNNER_TEMP/android-user"
+          export ANDROID_AVD_HOME="$ANDROID_USER_HOME/avd"
+          mkdir -p "$ANDROID_AVD_HOME"
+
           diagnose() {
             echo "=== adb devices ==="
             "$ADB" devices -l || true
+            echo "=== AVD list ==="
+            "$EMULATOR" -list-avds || true
+            echo "=== AVD directory ==="
+            find "$ANDROID_AVD_HOME" -maxdepth 2 -type f -print 2>/dev/null || true
             echo "=== emulator process ==="
             ps -ef | grep '[e]mulator' || true
             echo "=== emulator log tail ==="
@@ -242,7 +250,11 @@ jobs:
           echo "no" | "$AVDMANAGER" create avd \
             --force \
             --name ciApi36 \
-            --package "system-images;android-${ANDROID_PLATFORM};google_apis;x86_64"
+            --package "system-images;android-${ANDROID_PLATFORM};google_apis;x86_64" \
+            --path "$ANDROID_AVD_HOME/ciApi36.avd"
+
+          "$EMULATOR" -list-avds | tee avd-list.txt
+          grep -Fxq "ciApi36" avd-list.txt
 
           sudo chmod 666 /dev/kvm || true
           "$EMULATOR" -accel-check | tee emulator-accel.txt || true
@@ -326,6 +338,7 @@ jobs:
             emulator.log
             emulator-accel.txt
             emulator.pid
+            avd-list.txt
             activity-launch.txt
             accessibility-state.txt
             logcat.txt
