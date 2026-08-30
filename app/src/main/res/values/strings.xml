@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">AutoScroller Lite</string>
+    <string name="accessibility_description">Локальний автоскролер. Виконує лише жести прокрутки та показує панель керування.</string>
+</resources>
