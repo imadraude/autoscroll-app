@@ -2,10 +2,8 @@ package com.imadraude.autoscroller;
 
 import android.app.Activity;
 import android.app.DownloadManager;
-import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
-import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
@@ -14,6 +12,8 @@ import android.database.Cursor;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Environment;
+import android.os.Handler;
+import android.os.Looper;
 import android.provider.Settings;
 
 import org.json.JSONArray;
@@ -43,33 +43,23 @@ final class UpdateManager {
     private static final String RELEASE_ASSET_NAME = "AutoScroller-Lite-v1.0.apk";
     private static final String TAG_PREFIX = "build-";
     private static final String UPDATE_MIME = "application/vnd.android.package-archive";
+    private static final long DOWNLOAD_POLL_INTERVAL_MS = 1000L;
 
     private final Activity activity;
     private final Listener listener;
     private final SharedPreferences preferences;
     private final DownloadManager downloadManager;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final long currentBuild;
 
     private long pendingDownloadId = -1L;
     private int pendingBuild = -1;
-    private boolean receiverRegistered;
     private boolean checking;
     private boolean destroyed;
     private boolean waitingForInstallPermission;
 
-    private final BroadcastReceiver downloadReceiver = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            if (!DownloadManager.ACTION_DOWNLOAD_COMPLETE.equals(intent.getAction())) {
-                return;
-            }
-            long completedId = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1L);
-            if (completedId == pendingDownloadId) {
-                handlePendingDownload();
-            }
-        }
-    };
+    private final Runnable downloadPoll = this::handlePendingDownload;
 
     UpdateManager(Activity activity, Listener listener) {
         this.activity = activity;
@@ -80,7 +70,6 @@ final class UpdateManager {
     }
 
     void start() {
-        registerDownloadReceiver();
         pendingDownloadId = preferences.getLong(AppPreferences.KEY_UPDATE_DOWNLOAD_ID, -1L);
         pendingBuild = preferences.getInt(AppPreferences.KEY_UPDATE_BUILD, -1);
 
@@ -140,28 +129,8 @@ final class UpdateManager {
 
     void destroy() {
         destroyed = true;
+        mainHandler.removeCallbacks(downloadPoll);
         executor.shutdownNow();
-        if (receiverRegistered) {
-            try {
-                activity.unregisterReceiver(downloadReceiver);
-            } catch (IllegalArgumentException ignored) {
-                // Receiver was already unregistered by the framework.
-            }
-            receiverRegistered = false;
-        }
-    }
-
-    private void registerDownloadReceiver() {
-        if (receiverRegistered) {
-            return;
-        }
-        IntentFilter filter = new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            activity.registerReceiver(downloadReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
-        } else {
-            activity.registerReceiver(downloadReceiver, filter);
-        }
-        receiverRegistered = true;
     }
 
     private ReleaseInfo fetchLatestRelease() throws IOException, JSONException {
@@ -258,6 +227,7 @@ final class UpdateManager {
                     .putInt(AppPreferences.KEY_UPDATE_BUILD, pendingBuild)
                     .apply();
             setStatus(activity.getString(R.string.update_status_downloading, pendingBuild));
+            scheduleDownloadPoll();
         } catch (RuntimeException exception) {
             pendingDownloadId = -1L;
             pendingBuild = -1;
@@ -283,6 +253,7 @@ final class UpdateManager {
                     || status == DownloadManager.STATUS_PAUSED
                     || status == DownloadManager.STATUS_RUNNING) {
                 setStatus(activity.getString(R.string.update_status_downloading, pendingBuild));
+                scheduleDownloadPoll();
                 return;
             }
 
@@ -328,6 +299,13 @@ final class UpdateManager {
         install.setDataAndType(apkUri, UPDATE_MIME);
         install.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
         activity.startActivity(install);
+    }
+
+    private void scheduleDownloadPoll() {
+        mainHandler.removeCallbacks(downloadPoll);
+        if (!destroyed) {
+            mainHandler.postDelayed(downloadPoll, DOWNLOAD_POLL_INTERVAL_MS);
+        }
     }
 
     private boolean isTrustedUpdate(File apk, int expectedBuild) {
@@ -416,6 +394,7 @@ final class UpdateManager {
     }
 
     private void clearPendingDownload(boolean removeDownload) {
+        mainHandler.removeCallbacks(downloadPoll);
         if (removeDownload && pendingDownloadId >= 0L) {
             downloadManager.remove(pendingDownloadId);
         }
