@@ -49,6 +49,7 @@ final class UpdateManager {
     private final SharedPreferences preferences;
     private final DownloadManager downloadManager;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
+    private final long currentBuild;
 
     private long pendingDownloadId = -1L;
     private int pendingBuild = -1;
@@ -75,6 +76,7 @@ final class UpdateManager {
         this.listener = listener;
         preferences = activity.getSharedPreferences(AppPreferences.FILE_NAME, Context.MODE_PRIVATE);
         downloadManager = (DownloadManager) activity.getSystemService(Context.DOWNLOAD_SERVICE);
+        currentBuild = installedVersionCode(activity);
     }
 
     void start() {
@@ -83,7 +85,7 @@ final class UpdateManager {
         pendingBuild = preferences.getInt(AppPreferences.KEY_UPDATE_BUILD, -1);
 
         if (pendingDownloadId >= 0L && pendingBuild > 0) {
-            if (pendingBuild <= BuildConfig.VERSION_CODE) {
+            if (pendingBuild <= currentBuild) {
                 clearPendingDownload(true);
                 checkForUpdates();
             } else {
@@ -116,10 +118,10 @@ final class UpdateManager {
                     if (destroyed) {
                         return;
                     }
-                    if (release.buildNumber <= BuildConfig.VERSION_CODE) {
+                    if (release.buildNumber <= currentBuild) {
                         setStatus(activity.getString(
                                 R.string.update_status_latest,
-                                BuildConfig.VERSION_CODE
+                                currentBuild
                         ));
                     } else {
                         startDownload(release);
@@ -168,7 +170,7 @@ final class UpdateManager {
         connection.setReadTimeout(8000);
         connection.setRequestMethod("GET");
         connection.setRequestProperty("Accept", "application/vnd.github+json");
-        connection.setRequestProperty("User-Agent", "AutoScroller-Lite/" + BuildConfig.VERSION_CODE);
+        connection.setRequestProperty("User-Agent", "AutoScroller-Lite/" + currentBuild);
 
         try {
             int responseCode = connection.getResponseCode();
@@ -344,7 +346,7 @@ final class UpdateManager {
             if (archive == null
                     || !activity.getPackageName().equals(archive.packageName)
                     || packageVersionCode(archive) != expectedBuild
-                    || packageVersionCode(archive) <= BuildConfig.VERSION_CODE) {
+                    || packageVersionCode(archive) <= currentBuild) {
                 return false;
             }
 
@@ -356,6 +358,18 @@ final class UpdateManager {
             return currentSignatures[0].equals(archiveSignatures[0]);
         } catch (PackageManager.NameNotFoundException | RuntimeException exception) {
             return false;
+        }
+    }
+
+    private static long installedVersionCode(Context context) {
+        try {
+            PackageInfo packageInfo = context.getPackageManager().getPackageInfo(
+                    context.getPackageName(),
+                    0
+            );
+            return packageVersionCode(packageInfo);
+        } catch (PackageManager.NameNotFoundException exception) {
+            throw new IllegalStateException("Installed package metadata is unavailable", exception);
         }
     }
 
