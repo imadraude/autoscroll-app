@@ -15,12 +15,15 @@ env:
   ANDROID_PLATFORM: '36'
   BUILD_TOOLS: '36.0.0'
   APK_SIZE_LIMIT_BYTES: '262144'
+  APP_VERSION_CODE: ${{ github.run_number }}
 
 jobs:
   quality:
     name: Build, test and audit
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    outputs:
+      stable_signing: ${{ steps.signing.outputs.enabled }}
 
     steps:
       - name: Checkout
@@ -59,25 +62,82 @@ jobs:
 
           test -d "$ANDROID_HOME/platforms/android-${ANDROID_PLATFORM}"
 
-      - name: Enforce source privacy policy
+      - name: Prepare stable release signing
+        id: signing
+        shell: bash
+        env:
+          SIGNING_PASSPHRASE: ${{ secrets.SIGNING_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${SIGNING_PASSPHRASE:-}" ]]; then
+            echo "Stable signing secret is not configured; CI will verify a debug APK and skip GitHub Release publication."
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "STABLE_SIGNING=false" >> "$GITHUB_ENV"
+            exit 0
+          fi
+
+          ENCRYPTED_KEYSTORE="$RUNNER_TEMP/autoscroller-release.jks.enc"
+          KEYSTORE="$RUNNER_TEMP/autoscroller-release.jks"
+          base64 -d .github/signing/autoscroller-release.jks.enc.b64 > "$ENCRYPTED_KEYSTORE"
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 \
+            -in "$ENCRYPTED_KEYSTORE" \
+            -out "$KEYSTORE" \
+            -pass env:SIGNING_PASSPHRASE
+          chmod 600 "$KEYSTORE"
+
+          keytool -list -v \
+            -keystore "$KEYSTORE" \
+            -storepass "$SIGNING_PASSPHRASE" \
+            -alias autoscroller \
+            > signing-key-info.txt
+          grep -Fq 'BB:98:91:BE:E0:FE:98:CA:46:A6:F0:A4:98:EF:59:FF:77:C4:72:76:2B:5E:F3:24:D5:45:1A:1A:16:90:96:7C' signing-key-info.txt
+
+          echo "ANDROID_KEYSTORE_PATH=$KEYSTORE" >> "$GITHUB_ENV"
+          echo "ANDROID_KEYSTORE_PASSWORD=$SIGNING_PASSPHRASE" >> "$GITHUB_ENV"
+          echo "ANDROID_KEY_ALIAS=autoscroller" >> "$GITHUB_ENV"
+          echo "ANDROID_KEY_PASSWORD=$SIGNING_PASSPHRASE" >> "$GITHUB_ENV"
+          echo "STABLE_SIGNING=true" >> "$GITHUB_ENV"
+          echo "enabled=true" >> "$GITHUB_OUTPUT"
+
+      - name: Enforce source security policy
         shell: bash
         run: |
           set -euo pipefail
 
-          if grep -RInE '<uses-permission([[:space:]]|>)' app/src/main/AndroidManifest.xml; then
-            echo "ERROR: This app is designed to request zero app permissions."
+          grep -Fq '<uses-permission android:name="android.permission.INTERNET" />' app/src/main/AndroidManifest.xml
+          grep -Fq '<uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />' app/src/main/AndroidManifest.xml
+          PERMISSION_COUNT="$(grep -c '<uses-permission ' app/src/main/AndroidManifest.xml)"
+          if [[ "$PERMISSION_COUNT" != "2" ]]; then
+            echo "ERROR: Only INTERNET and REQUEST_INSTALL_PACKAGES are permitted."
+            exit 1
+          fi
+
+          if find app/src/main/java -name '*.java' ! -name 'UpdateManager.java' -print0 \
+            | xargs -0 grep -InE 'java\.net\.|javax\.net\.'; then
+            echo "ERROR: Network API found outside UpdateManager.java."
             exit 1
           fi
 
           if grep -RInE \
-            'java\.net\.|javax\.net\.|android\.webkit\.WebView|okhttp3\.|retrofit2\.|org\.apache\.http\.' \
+            'android\.webkit\.WebView|okhttp3\.|retrofit2\.|org\.apache\.http\.' \
             app/src/main/java; then
-            echo "ERROR: Network-capable API found in production source."
+            echo "ERROR: Unexpected network stack found in production source."
+            exit 1
+          fi
+
+          grep -Fq 'https://api.github.com/repos/imadraude/autoscroll-app/releases/latest' \
+            app/src/main/java/com/imadraude/autoscroller/UpdateManager.java
+          grep -Fq 'https://github.com/imadraude/autoscroll-app/releases/download/' \
+            app/src/main/java/com/imadraude/autoscroller/UpdateManager.java
+
+          if grep -RInF 'http://' app/src/main/java; then
+            echo "ERROR: Plaintext HTTP is forbidden."
             exit 1
           fi
 
           if find . -type f \( -name '*.jks' -o -name '*.keystore' -o -name '*.p12' -o -name '*.pem' -o -name '*.key' \) -print -quit | grep -q .; then
-            echo "ERROR: Key or certificate material must not be committed."
+            echo "ERROR: Unencrypted key or certificate material must not be committed."
             exit 1
           fi
 
@@ -116,27 +176,43 @@ jobs:
         run: |
           set -euo pipefail
 
-          APK="app/build/outputs/apk/debug/app-debug.apk"
-          RELEASE_APK="app/build/outputs/apk/release/app-release-unsigned.apk"
+          DEBUG_APK="app/build/outputs/apk/debug/app-debug.apk"
+          SIGNED_RELEASE_APK="app/build/outputs/apk/release/app-release.apk"
+          UNSIGNED_RELEASE_APK="app/build/outputs/apk/release/app-release-unsigned.apk"
           AAPT="$ANDROID_HOME/build-tools/${BUILD_TOOLS}/aapt"
           APKSIGNER="$ANDROID_HOME/build-tools/${BUILD_TOOLS}/apksigner"
 
-          test -f "$APK"
-          test -f "$RELEASE_APK"
+          test -f "$DEBUG_APK"
+          if [[ "${STABLE_SIGNING:-false}" == "true" ]]; then
+            test -f "$SIGNED_RELEASE_APK"
+            APK="$SIGNED_RELEASE_APK"
+          else
+            test -f "$UNSIGNED_RELEASE_APK"
+            APK="$DEBUG_APK"
+          fi
 
           "$AAPT" dump badging "$APK" | tee apk-badging.txt
           "$AAPT" dump permissions "$APK" | tee permissions.txt
 
-          grep -Fq "package: name='com.imadraude.autoscroller' versionCode='1' versionName='1.0'" apk-badging.txt
+          grep -Fq "package: name='com.imadraude.autoscroller' versionCode='${APP_VERSION_CODE}' versionName='1.0'" apk-badging.txt
           grep -Fq "sdkVersion:'26'" apk-badging.txt
           grep -Fq "targetSdkVersion:'36'" apk-badging.txt
 
-          if grep -Eq 'uses-permission|android.permission.INTERNET|android.permission.ACCESS_NETWORK_STATE' permissions.txt; then
-            echo "ERROR: Generated APK requests a permission."
+          grep -Fq "uses-permission: name='android.permission.INTERNET'" permissions.txt
+          grep -Fq "uses-permission: name='android.permission.REQUEST_INSTALL_PACKAGES'" permissions.txt
+          UNEXPECTED_PERMISSIONS="$(grep -F 'uses-permission:' permissions.txt \
+            | grep -vF "android.permission.INTERNET" \
+            | grep -vF "android.permission.REQUEST_INSTALL_PACKAGES" || true)"
+          if [[ -n "$UNEXPECTED_PERMISSIONS" ]]; then
+            printf '%s\n' "$UNEXPECTED_PERMISSIONS"
+            echo "ERROR: Generated APK requests an unexpected permission."
             exit 1
           fi
 
           "$APKSIGNER" verify --verbose --print-certs "$APK" | tee signature.txt
+          if [[ "${STABLE_SIGNING:-false}" == "true" ]]; then
+            grep -Fqi 'bb9891bee0fe98ca46a6f0a498ef59ff77c472762b5ef324d5451a1a1690967c' signature.txt
+          fi
 
           unzip -l "$APK" | tee apk-contents.txt
           if grep -Eq '[[:space:]]lib/.*\.so$' apk-contents.txt; then
@@ -151,20 +227,22 @@ jobs:
             exit 1
           fi
 
-          cp "$APK" AutoScroller-Lite-v1.0-debug.apk
-          sha256sum AutoScroller-Lite-v1.0-debug.apk | tee AutoScroller-Lite-v1.0-debug.apk.sha256
+          printf '%s\n' "${STABLE_SIGNING:-false}" > stable-signing.txt
+          cp "$APK" AutoScroller-Lite-v1.0.apk
+          sha256sum AutoScroller-Lite-v1.0.apk | tee AutoScroller-Lite-v1.0.apk.sha256
 
       - name: Upload verified APK
         uses: actions/upload-artifact@v7
         with:
           name: AutoScroller-Lite-v1.0
           path: |
-            AutoScroller-Lite-v1.0-debug.apk
-            AutoScroller-Lite-v1.0-debug.apk.sha256
+            AutoScroller-Lite-v1.0.apk
+            AutoScroller-Lite-v1.0.apk.sha256
             permissions.txt
             signature.txt
             apk-badging.txt
             apk-size-bytes.txt
+            stable-signing.txt
           if-no-files-found: error
           retention-days: 30
 
@@ -178,6 +256,7 @@ jobs:
             debug-runtime-dependencies.txt
             release-runtime-dependencies.txt
             apk-contents.txt
+            signing-key-info.txt
           if-no-files-found: warn
           retention-days: 30
 
@@ -397,7 +476,10 @@ jobs:
   release:
     name: Publish GitHub Release
     needs: [quality, emulator-smoke, codeql]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: >-
+      needs.quality.outputs.stable_signing == 'true' &&
+      ((github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -419,12 +501,14 @@ jobs:
           set -euo pipefail
           TAG="build-${GITHUB_RUN_NUMBER}"
 
+          grep -Fxq 'true' release/stable-signing.txt
+
           gh release create "$TAG" \
-            release/AutoScroller-Lite-v1.0-debug.apk \
-            release/AutoScroller-Lite-v1.0-debug.apk.sha256 \
+            release/AutoScroller-Lite-v1.0.apk \
+            release/AutoScroller-Lite-v1.0.apk.sha256 \
             release/permissions.txt \
             release/signature.txt \
             --target "$GITHUB_SHA" \
             --title "AutoScroller Lite — build #${GITHUB_RUN_NUMBER}" \
-            --notes "Автоматичний перевірений білд. Усі CI-перевірки пройдені: unit tests, strict lint, debug/release build, APK audit, CodeQL та Android 16 emulator smoke test." \
+            --notes "Автоматичний стабільно підписаний білд. Усі CI-перевірки пройдені: unit tests, strict lint, debug/release build, APK audit, CodeQL та Android 16 emulator smoke test. Застосунок перевіряє цей GitHub Release для автооновлень." \
             --latest
