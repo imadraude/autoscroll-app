@@ -8,10 +8,10 @@ public class ScrollTimingTest {
 
     @Test
     public void swipeDurationsMatchExpectedProfile() {
-        assertEquals(320L, ScrollTiming.swipeDurationForSpeed(1));
-        assertEquals(250L, ScrollTiming.swipeDurationForSpeed(2));
-        assertEquals(190L, ScrollTiming.swipeDurationForSpeed(3));
-        assertEquals(140L, ScrollTiming.swipeDurationForSpeed(4));
+        assertEquals(550L, ScrollTiming.swipeDurationForSpeed(1));
+        assertEquals(400L, ScrollTiming.swipeDurationForSpeed(2));
+        assertEquals(280L, ScrollTiming.swipeDurationForSpeed(3));
+        assertEquals(180L, ScrollTiming.swipeDurationForSpeed(4));
         assertEquals(100L, ScrollTiming.swipeDurationForSpeed(5));
     }
 
@@ -26,7 +26,7 @@ public class ScrollTimingTest {
 
     @Test
     public void delayAccountsForSwipeDuration() {
-        assertEquals(1010L, ScrollTiming.delayAfterGesture(3, 190L));
+        assertEquals(920L, ScrollTiming.delayAfterGesture(3, 280L));
         assertEquals(80L, ScrollTiming.delayAfterGesture(5, 1000L));
     }
 
@@ -34,7 +34,7 @@ public class ScrollTimingTest {
     public void invalidLevelsFallBackToDefaults() {
         assertEquals(ScrollTiming.DEFAULT_SWIPE_SPEED_LEVEL, ScrollTiming.normalizeSwipeSpeed(0));
         assertEquals(ScrollTiming.DEFAULT_FREQUENCY_LEVEL, ScrollTiming.normalizeFrequency(6));
-        assertEquals(190L, ScrollTiming.swipeDurationForSpeed(-100));
+        assertEquals(280L, ScrollTiming.swipeDurationForSpeed(-100));
         assertEquals(1200L, ScrollTiming.periodForFrequency(100));
     }
 

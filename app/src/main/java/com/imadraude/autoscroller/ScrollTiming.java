@@ -29,13 +29,13 @@ final class ScrollTiming {
     static long swipeDurationForSpeed(int level) {
         switch (normalizeSwipeSpeed(level)) {
             case 1:
-                return 320L;
+                return 550L;
             case 2:
-                return 250L;
+                return 400L;
             case 3:
-                return 190L;
+                return 280L;
             case 4:
-                return 140L;
+                return 180L;
             case 5:
                 return 100L;
             default:
